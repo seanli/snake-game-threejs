@@ -37,6 +37,7 @@
             left: 10px;
             color: white;
             font-size: 20px;
+            z-index: 1;
         }
         #gameOver {
             position: absolute;
@@ -47,6 +48,7 @@
             font-size: 36px;
             text-align: center;
             display: none;
+            z-index: 1;
         }
         #restartButton {
             margin-top: 20px;
@@ -64,12 +66,21 @@
     <div id="game-container">
         <div id="score">Score: 0</div>
         <div id="gameOver">
-            Game Over!
-            <br>
-            <button id="restartButton">Restart</button>
+            <div>Game Over!</div>
+            <div>Final Score: <span id="finalScore">0</span></div>
+            <div style="margin-top: 20px;">Press R to restart</div>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
-    <script src="game.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+    <script type="module">
+        import { Game } from './src/Game.js';
+        new Game();
+    </script>
 </body>
 </html>
