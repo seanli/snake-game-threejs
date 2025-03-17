@@ -57,9 +57,11 @@ function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x222222);
 
-    // Create camera
+    // Create camera with maximized view
     camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, GRID_SIZE * 1.3, GRID_SIZE * 0.4); // Slightly more zoomed out, top-down view
+    
+    // Calculate optimal camera position based on viewport size
+    updateCameraForViewport();
     camera.lookAt(0, 0, 0);
 
     // Create renderer with enhanced quality
@@ -337,10 +339,52 @@ function handleKeyDown(event) {
     }
 }
 
+// Calculate optimal camera position based on viewport dimensions
+function updateCameraForViewport() {
+    // Get the aspect ratio of the viewport
+    const aspect = window.innerWidth / window.innerHeight;
+    
+    // Base height position on grid size
+    let cameraHeight = GRID_SIZE * 1.1;
+    
+    // Adjust camera Z position based on aspect ratio
+    // For wider screens, move camera back to see more of the board
+    // For taller screens, move camera closer
+    let cameraZ;
+    
+    if (aspect >= 1) { // Landscape or square
+        // In landscape, we need to move back more to see the width
+        cameraZ = GRID_SIZE * 0.2;
+        // For very wide screens, adjust height to compensate
+        if (aspect > 1.5) {
+            cameraHeight *= 0.9;
+        }
+    } else { // Portrait
+        // In portrait, we can move closer since the width is smaller
+        cameraZ = 0;
+        // For very tall screens, adjust height to show more of the board
+        if (aspect < 0.7) {
+            cameraHeight *= 0.8;
+        }
+    }
+    
+    // Set the camera position
+    camera.position.set(0, cameraHeight, cameraZ);
+    
+    // Adjust field of view based on aspect ratio
+    // Wider FOV for portrait, narrower for landscape
+    camera.fov = aspect >= 1 ? 45 : 55;
+}
+
 // Handle window resize
 function handleResize() {
     // Update camera aspect ratio
     camera.aspect = window.innerWidth / window.innerHeight;
+    
+    // Recalculate camera position for new viewport size
+    updateCameraForViewport();
+    
+    // Update projection matrix after changing camera properties
     camera.updateProjectionMatrix();
     
     // Resize renderer to match new window dimensions
