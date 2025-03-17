@@ -19,6 +19,7 @@ let inputBuffer = null;
 let score = 0;
 let gameRunning = true;
 let bullets = [];
+let waveTime = 0; // Time counter for the wave animation
 let explosions = [];
 
 // Clean up the scene and remove all objects
@@ -442,10 +443,16 @@ function moveSnake() {
     // Move the body (follow the head)
     for (let i = snake.length - 1; i > 0; i--) {
         snake[i].position.copy(snake[i - 1].position);
+        
+        // Apply wave motion to each segment
+        applyWaveMotion(snake[i], i);
     }
 
     // Move the head
     head.position.set(newHeadPosition.x, newHeadPosition.y, newHeadPosition.z);
+
+    // Increment the wave time counter
+    waveTime += 0.1;
 
     // Check for food collision
     if (
@@ -464,6 +471,37 @@ function moveSnake() {
             createBullet(snake[i].position.clone(), randomDirection);
         }
     }
+}
+
+// Apply wave motion to a snake segment
+function applyWaveMotion(segment, index) {
+    // Calculate wave amplitude based on segment position
+    // Further segments have more pronounced waves
+    const amplitude = 0.15 * Math.min(index / 5, 0.5);
+    
+    // Calculate wave frequency - different for horizontal and vertical movement
+    const frequency = 1.5;
+    
+    // Calculate phase based on segment index and time
+    // This creates a traveling wave effect along the snake's body
+    const phase = waveTime - (index * 0.2);
+    
+    // Calculate the wave offset
+    let xOffset = 0;
+    let zOffset = 0;
+    
+    // Apply wave perpendicular to movement direction
+    if (direction.x !== 0) {
+        // Moving horizontally, wave moves vertically (z-axis)
+        zOffset = amplitude * Math.sin(frequency * phase);
+    } else if (direction.z !== 0) {
+        // Moving vertically, wave moves horizontally (x-axis)
+        xOffset = amplitude * Math.sin(frequency * phase);
+    }
+    
+    // Apply the wave offset to the segment's position
+    segment.position.x += xOffset;
+    segment.position.z += zOffset;
 }
 
 // Get a random direction for bullets
