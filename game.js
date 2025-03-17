@@ -443,16 +443,11 @@ function moveSnake() {
     // Move the body (follow the head)
     for (let i = snake.length - 1; i > 0; i--) {
         snake[i].position.copy(snake[i - 1].position);
-        
-        // Apply wave motion to each segment
-        applyWaveMotion(snake[i], i);
+        // Wave motion is now applied in the animation loop for continuous movement
     }
 
     // Move the head
     head.position.set(newHeadPosition.x, newHeadPosition.y, newHeadPosition.z);
-
-    // Increment the wave time counter
-    waveTime += 0.1;
 
     // Check for food collision
     if (
@@ -475,25 +470,36 @@ function moveSnake() {
 
 // Apply wave motion to a snake segment
 function applyWaveMotion(segment, index) {
-    // Calculate a simple up-down bounce effect
-    // The bounce height decreases with distance from head
-    const bounceHeight = 0.2 * Math.max(0, 1 - (index * 0.05));
+    // Much higher bounce height for very visible jumps
+    // Use a constant high value for all segments to make waves more visible
+    const bounceHeight = 0.8;
     
-    // Calculate bounce frequency
-    const frequency = 2;
+    // Use different frequencies for a more organic wave-like motion
+    // Each segment will have a different frequency to create individual movement
+    const baseFrequency = 4;
+    const individualFrequency = baseFrequency + (index * 0.15);
     
-    // Calculate phase based on segment index and time
-    // This creates a sequential jumping effect
-    const phase = waveTime - (index * 0.3);
+    // Use continuous time-based animation even when snake isn't moving
+    // This ensures blocks are constantly moving individually
+    const now = Date.now() / 1000; // Current time in seconds for smooth animation
+    const timeOffset = index * 0.4; // Larger offset for more distinct movement between segments
     
-    // Calculate the vertical bounce using absolute value of sine for a jumping effect
-    // This creates a more pronounced up-down motion
-    const bounce = bounceHeight * Math.abs(Math.sin(frequency * phase));
+    // Create a sharper, more pronounced wave pattern
+    // Using a combination of sine waves with different phases
+    const primaryWave = Math.sin(individualFrequency * now - timeOffset);
+    
+    // Apply the bounce with higher amplitude and a sharper curve
+    // Use Math.pow to create a more pronounced effect
+    const bounce = bounceHeight * Math.pow(0.5 + 0.5 * primaryWave, 2);
     
     // Apply the bounce to the segment's vertical position (y-axis)
-    // Reset y position first to avoid accumulation
-    segment.position.y = 0;
-    segment.position.y += bounce;
+    segment.position.y = bounce;
+    
+    // Add a more pronounced horizontal wobble for more dynamic movement
+    // This creates a snake-like slithering effect combined with the jumping
+    const wobbleAmount = 0.15;
+    segment.position.x += wobbleAmount * Math.sin(individualFrequency * 0.8 * now - timeOffset * 1.5);
+    segment.position.z += wobbleAmount * Math.cos(individualFrequency * 0.6 * now - timeOffset * 1.2);
 }
 
 // Get a random direction for bullets
@@ -689,6 +695,25 @@ function animate(currentTime) {
     }
     
     requestAnimationFrame(animate);
+    
+    // Apply wave motion to snake segments every frame for continuous animation
+    if (snake.length > 1) {
+        for (let i = 1; i < snake.length; i++) {
+            // Store original position before applying wave
+            const originalX = snake[i].position.x;
+            const originalZ = snake[i].position.z;
+            
+            // Reset Y position (will be set by wave motion)
+            snake[i].position.y = 0;
+            
+            // Apply wave motion to this segment
+            applyWaveMotion(snake[i], i);
+            
+            // Restore original X and Z positions (wave motion adds offsets)
+            snake[i].position.x = originalX;
+            snake[i].position.z = originalZ;
+        }
+    }
     
     // Move snake at fixed intervals
     if (gameRunning && currentTime - lastMoveTime > MOVE_INTERVAL) {
