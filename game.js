@@ -68,9 +68,20 @@ function init() {
         powerPreference: 'high-performance',
         precision: 'highp'
     });
+    // Get the game container element
+    const gameContainer = document.getElementById('game-container');
+    
+    // Set renderer size to fit the container
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio); // Use device pixel ratio for sharper rendering
-    document.body.appendChild(renderer.domElement);
+    
+    // Clear any existing canvas before adding a new one
+    while (gameContainer.querySelector('canvas')) {
+        gameContainer.removeChild(gameContainer.querySelector('canvas'));
+    }
+    
+    // Add the renderer to the game container
+    gameContainer.appendChild(renderer.domElement);
 
     // Create grid for reference
     createGrid();
@@ -328,8 +339,11 @@ function handleKeyDown(event) {
 
 // Handle window resize
 function handleResize() {
+    // Update camera aspect ratio
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    
+    // Resize renderer to match new window dimensions
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio); // Maintain pixel ratio on resize
 }
