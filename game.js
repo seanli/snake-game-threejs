@@ -344,36 +344,44 @@ function updateCameraForViewport() {
     // Get the aspect ratio of the viewport
     const aspect = window.innerWidth / window.innerHeight;
     
-    // Base height position on grid size
-    let cameraHeight = GRID_SIZE * 1.1;
+    // Calculate the required field of view to see the entire game board
+    // We need to ensure the entire board (including borders) is visible
     
-    // Adjust camera Z position based on aspect ratio
-    // For wider screens, move camera back to see more of the board
-    // For taller screens, move camera closer
-    let cameraZ;
+    // The effective width and height of the game area including borders
+    const effectiveWidth = GRID_SIZE + 2; // Add 2 for the borders (1 on each side)
+    const effectiveHeight = GRID_SIZE + 2;
+    
+    // Calculate camera distance needed to view the entire board
+    let cameraHeight, cameraZ;
     
     if (aspect >= 1) { // Landscape or square
-        // In landscape, we need to move back more to see the width
-        cameraZ = GRID_SIZE * 0.2;
-        // For very wide screens, adjust height to compensate
-        if (aspect > 1.5) {
-            cameraHeight *= 0.9;
-        }
+        // In landscape, the limiting factor is usually the height
+        // We need to be far enough back to see the full height of the board
+        cameraHeight = effectiveHeight * 0.8;
+        // Position Z based on aspect ratio
+        cameraZ = effectiveHeight * 0.5;
     } else { // Portrait
-        // In portrait, we can move closer since the width is smaller
-        cameraZ = 0;
-        // For very tall screens, adjust height to show more of the board
-        if (aspect < 0.7) {
-            cameraHeight *= 0.8;
-        }
+        // In portrait, the limiting factor is usually the width
+        // We need to be far enough back to see the full width of the board
+        cameraHeight = effectiveHeight * 1.0;
+        // For portrait, we need to be further back to see the full width
+        cameraZ = effectiveHeight * 0.3;
     }
     
     // Set the camera position
     camera.position.set(0, cameraHeight, cameraZ);
     
-    // Adjust field of view based on aspect ratio
-    // Wider FOV for portrait, narrower for landscape
-    camera.fov = aspect >= 1 ? 45 : 55;
+    // Calculate the field of view needed to see the entire board
+    // The formula is based on the tangent of half the FOV angle
+    // We add a small margin (0.9 factor) to ensure everything is visible
+    const distanceFromCenter = Math.sqrt(cameraHeight * cameraHeight + cameraZ * cameraZ);
+    
+    // Calculate the FOV needed to see the largest dimension
+    const requiredFovHeight = 2 * Math.atan(effectiveHeight / (2 * distanceFromCenter)) * (180 / Math.PI);
+    const requiredFovWidth = 2 * Math.atan((effectiveWidth / aspect) / (2 * distanceFromCenter)) * (180 / Math.PI);
+    
+    // Use the larger of the two required FOVs to ensure everything is visible
+    camera.fov = Math.max(requiredFovHeight, requiredFovWidth) * 1.1; // Add 10% margin
 }
 
 // Handle window resize
