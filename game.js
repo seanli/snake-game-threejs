@@ -475,33 +475,25 @@ function moveSnake() {
 
 // Apply wave motion to a snake segment
 function applyWaveMotion(segment, index) {
-    // Calculate wave amplitude based on segment position
-    // Further segments have more pronounced waves
-    const amplitude = 0.15 * Math.min(index / 5, 0.5);
+    // Calculate a simple up-down bounce effect
+    // The bounce height decreases with distance from head
+    const bounceHeight = 0.2 * Math.max(0, 1 - (index * 0.05));
     
-    // Calculate wave frequency - different for horizontal and vertical movement
-    const frequency = 1.5;
+    // Calculate bounce frequency
+    const frequency = 2;
     
     // Calculate phase based on segment index and time
-    // This creates a traveling wave effect along the snake's body
-    const phase = waveTime - (index * 0.2);
+    // This creates a sequential jumping effect
+    const phase = waveTime - (index * 0.3);
     
-    // Calculate the wave offset
-    let xOffset = 0;
-    let zOffset = 0;
+    // Calculate the vertical bounce using absolute value of sine for a jumping effect
+    // This creates a more pronounced up-down motion
+    const bounce = bounceHeight * Math.abs(Math.sin(frequency * phase));
     
-    // Apply wave perpendicular to movement direction
-    if (direction.x !== 0) {
-        // Moving horizontally, wave moves vertically (z-axis)
-        zOffset = amplitude * Math.sin(frequency * phase);
-    } else if (direction.z !== 0) {
-        // Moving vertically, wave moves horizontally (x-axis)
-        xOffset = amplitude * Math.sin(frequency * phase);
-    }
-    
-    // Apply the wave offset to the segment's position
-    segment.position.x += xOffset;
-    segment.position.z += zOffset;
+    // Apply the bounce to the segment's vertical position (y-axis)
+    // Reset y position first to avoid accumulation
+    segment.position.y = 0;
+    segment.position.y += bounce;
 }
 
 // Get a random direction for bullets
