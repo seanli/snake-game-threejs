@@ -839,5 +839,7 @@ function animate(currentTime) {
     }
 }
 
-// Start the game
-init();
+// Start the game when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    init();
+});
