@@ -62,7 +62,7 @@ function init() {
     
     // Calculate optimal camera position based on viewport size
     updateCameraForViewport();
-    camera.lookAt(0, 0, 0);
+    // Note: lookAt is now handled in updateCameraForViewport
 
     // Create renderer with enhanced quality
     renderer = new THREE.WebGLRenderer({ 
@@ -344,9 +344,6 @@ function updateCameraForViewport() {
     // Get the aspect ratio of the viewport
     const aspect = window.innerWidth / window.innerHeight;
     
-    // Calculate the required field of view to see the entire game board
-    // We need to ensure the entire board (including borders) is visible
-    
     // The effective width and height of the game area including borders
     const effectiveWidth = GRID_SIZE + 2; // Add 2 for the borders (1 on each side)
     const effectiveHeight = GRID_SIZE + 2;
@@ -354,34 +351,31 @@ function updateCameraForViewport() {
     // Calculate camera distance needed to view the entire board
     let cameraHeight, cameraZ;
     
+    // Position the camera higher and further back to see all borders
     if (aspect >= 1) { // Landscape or square
-        // In landscape, the limiting factor is usually the height
-        // We need to be far enough back to see the full height of the board
-        cameraHeight = effectiveHeight * 0.8;
-        // Position Z based on aspect ratio
-        cameraZ = effectiveHeight * 0.5;
+        cameraHeight = effectiveHeight * 1.2; // Higher position
+        cameraZ = effectiveHeight * 0.8;      // Further back
     } else { // Portrait
-        // In portrait, the limiting factor is usually the width
-        // We need to be far enough back to see the full width of the board
-        cameraHeight = effectiveHeight * 1.0;
-        // For portrait, we need to be further back to see the full width
-        cameraZ = effectiveHeight * 0.3;
+        cameraHeight = effectiveHeight * 1.4; // Even higher for portrait
+        cameraZ = effectiveHeight * 0.6;     // Adjusted back position
     }
     
     // Set the camera position
     camera.position.set(0, cameraHeight, cameraZ);
     
-    // Calculate the field of view needed to see the entire board
-    // The formula is based on the tangent of half the FOV angle
-    // We add a small margin (0.9 factor) to ensure everything is visible
+    // Tilt the camera to look slightly downward at the board
+    // This helps to see the borders closest to the viewer
+    camera.lookAt(0, -1, 0); // Look slightly below the center of the board
+    
+    // Calculate the distance from camera to the center of the board
     const distanceFromCenter = Math.sqrt(cameraHeight * cameraHeight + cameraZ * cameraZ);
     
-    // Calculate the FOV needed to see the largest dimension
+    // Calculate the FOV needed to see the largest dimension with extra margin
     const requiredFovHeight = 2 * Math.atan(effectiveHeight / (2 * distanceFromCenter)) * (180 / Math.PI);
     const requiredFovWidth = 2 * Math.atan((effectiveWidth / aspect) / (2 * distanceFromCenter)) * (180 / Math.PI);
     
-    // Use the larger of the two required FOVs to ensure everything is visible
-    camera.fov = Math.max(requiredFovHeight, requiredFovWidth) * 1.1; // Add 10% margin
+    // Use a larger margin (1.2) to ensure all borders are visible
+    camera.fov = Math.max(requiredFovHeight, requiredFovWidth) * 1.2;
 }
 
 // Handle window resize
@@ -390,6 +384,7 @@ function handleResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     
     // Recalculate camera position for new viewport size
+    // This will also update the camera.lookAt direction
     updateCameraForViewport();
     
     // Update projection matrix after changing camera properties
