@@ -1,11 +1,62 @@
 // Game constants
-const GRID_SIZE = 20;
+const GRID_SIZE = 16; // Must be even number
 const CELL_SIZE = 1;
 const MOVE_INTERVAL = 120; // milliseconds - decreased for faster movement
 const BULLET_SPEED = 0.15;
 const BULLET_LIFETIME = 3000; // milliseconds
 const BULLET_CHANCE = 0.1; // 10% chance for a body segment to shoot a bullet
 const INPUT_BUFFER_TIME = 50; // milliseconds to buffer input before next movement
+
+// GridCell class for robust grid positioning
+class GridCell {
+    constructor(x, z) {
+        this.x = Math.round(x);
+        this.z = Math.round(z);
+    }
+    
+    // Check if this cell is within grid boundaries
+    // We need to ensure the snake stays within the playable area
+    isValid() {
+        return this.x >= 0 && this.x < GRID_SIZE && 
+               this.z >= 0 && this.z < GRID_SIZE;
+    }
+    
+    // Check if this cell equals another cell
+    equals(otherCell) {
+        return this.x === otherCell.x && this.z === otherCell.z;
+    }
+    
+    // Get a new cell by adding a direction
+    add(direction) {
+        return new GridCell(
+            this.x + direction.x,
+            this.z + direction.z
+        );
+    }
+    
+    // Create a random cell within the grid (away from walls)
+    static random() {
+        return new GridCell(
+            Math.floor(Math.random() * (GRID_SIZE - 2)) + 1,
+            Math.floor(Math.random() * (GRID_SIZE - 2)) + 1
+        );
+    }
+    
+    // Apply position to a THREE.js object
+    // Position at cell center (x+0.5, z+0.5) to place in middle of grid cell
+    applyToObject(object) {
+        object.position.set(this.x + 0.5, 0, this.z + 0.5);
+    }
+    
+    // Create a GridCell from a THREE.js object position
+    // Subtract 0.5 to convert from center-of-cell to grid coordinates
+    static fromObject(object) {
+        return new GridCell(
+            Math.round(object.position.x - 0.5),
+            Math.round(object.position.z - 0.5)
+        );
+    }
+}
 
 // Game variables
 let scene, camera, renderer;
@@ -58,12 +109,10 @@ function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x222222);
 
-    // Create camera with maximized view
-    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-    
-    // Calculate optimal camera position based on viewport size
-    updateCameraForViewport();
-    // Note: lookAt is now handled in updateCameraForViewport
+    // Create camera with centered view
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(GRID_SIZE/2, GRID_SIZE * 0.8, GRID_SIZE * 1.2);
+    camera.lookAt(GRID_SIZE/2, 0, GRID_SIZE/2);
 
     // Create renderer with enhanced quality
     renderer = new THREE.WebGLRenderer({ 
@@ -101,12 +150,12 @@ function init() {
 
     // Main directional light
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(10, 20, 10);
+    directionalLight.position.set(GRID_SIZE/2, 20, GRID_SIZE/2);
     scene.add(directionalLight);
     
     // Add a secondary fill light from the opposite direction
     const fillLight = new THREE.DirectionalLight(0xffffcc, 0.4);
-    fillLight.position.set(-10, 10, -10);
+    fillLight.position.set(GRID_SIZE/2, 10, GRID_SIZE/2);
     scene.add(fillLight);
 
     // Add event listeners
@@ -124,70 +173,106 @@ function restartGame() {
     init();
 }
 
+// Create a wall mesh and add it to the scene
+function createWall(isHorizontal, position, material) {
+    // Create geometry based on wall orientation
+    // Make walls slightly thicker (1.01) to avoid z-fighting with grid lines
+    // For horizontal walls, width = GRID_SIZE + 1 to account for the offset walls
+    const geometry = new THREE.BoxGeometry(GRID_SIZE + 1, 1, 1.01);
+    const wall = new THREE.Mesh(geometry, material);
+    
+    // Rotate vertical walls
+    if (!isHorizontal) {
+        wall.rotation.y = Math.PI / 2;
+    }
+    
+    // Set position
+    wall.position.set(position.x, position.y, position.z);
+    scene.add(wall);
+    return wall;
+}
+
+// Create a corner block and add it to the scene
+function createCorner(position, material) {
+    // Make corners slightly larger (1.01) to avoid gaps with walls
+    const geometry = new THREE.BoxGeometry(1.01, 1, 1.01);
+    const corner = new THREE.Mesh(geometry, material);
+    corner.position.set(position.x, position.y, position.z);
+    scene.add(corner);
+    return corner;
+}
+
 // Create a reference grid
 function createGrid() {
-    const gridHelper = new THREE.GridHelper(GRID_SIZE, GRID_SIZE);
-    gridHelper.position.y = -0.5;
-    scene.add(gridHelper);
+    // Create a custom grid that aligns with cell centers
+    // We'll create our own grid lines to ensure perfect alignment
+    const gridMaterial = new THREE.LineBasicMaterial({ color: 0x444444 });
+    const gridGroup = new THREE.Group();
+    
+    // Create vertical grid lines (along z-axis)
+    // Start at 0 and end at GRID_SIZE to create GRID_SIZE cells
+    for (let x = 0; x <= GRID_SIZE; x++) {
+        const points = [
+            new THREE.Vector3(x, -0.5, 0),
+            new THREE.Vector3(x, -0.5, GRID_SIZE)
+        ];
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geometry, gridMaterial);
+        gridGroup.add(line);
+    }
+    
+    // Create horizontal grid lines (along x-axis)
+    // Start at 0 and end at GRID_SIZE to create GRID_SIZE cells
+    for (let z = 0; z <= GRID_SIZE; z++) {
+        const points = [
+            new THREE.Vector3(0, -0.5, z),
+            new THREE.Vector3(GRID_SIZE, -0.5, z)
+        ];
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geometry, gridMaterial);
+        gridGroup.add(line);
+    }
+    
+    scene.add(gridGroup);
 
-    // Create walls
+    // Create wall material
     const wallMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0x888888,
-    specular: 0xaaaaaa,
-    shininess: 50,
-    flatShading: false
-});
+        color: 0x888888,
+        specular: 0xaaaaaa,
+        shininess: 50,
+        flatShading: false
+    });
     
-    // Horizontal walls (top and bottom)
-    const horizontalWallGeometry = new THREE.BoxGeometry(GRID_SIZE + 2, 1, 1);
+    // Define wall positions to create a border around the playable area
+    // Walls should be positioned at -0.5 and GRID_SIZE-0.5 to create a perfect border
+    // This ensures the playable area is exactly GRID_SIZE x GRID_SIZE
+    const wallPositions = {
+        // Position walls at the grid boundaries
+        // For horizontal walls, we center them at x = GRID_SIZE/2
+        // For vertical walls, we center them at z = GRID_SIZE/2
+        // We offset by 0.5 to place walls exactly at the grid boundary
+        bottom: { x: GRID_SIZE/2, y: 0, z: GRID_SIZE + 0.5 },
+        top: { x: GRID_SIZE/2, y: 0, z: -0.5 },
+        left: { x: -0.5, y: 0, z: GRID_SIZE/2 },
+        right: { x: GRID_SIZE + 0.5, y: 0, z: GRID_SIZE/2 },
+        // Position corners at the exact grid corners
+        topLeft: { x: -0.5, y: 0, z: -0.5 },
+        topRight: { x: GRID_SIZE + 0.5, y: 0, z: -0.5 },
+        bottomLeft: { x: -0.5, y: 0, z: GRID_SIZE + 0.5 },
+        bottomRight: { x: GRID_SIZE + 0.5, y: 0, z: GRID_SIZE + 0.5 }
+    };
     
-    // Bottom wall
-    const bottomWall = new THREE.Mesh(horizontalWallGeometry, wallMaterial);
-    bottomWall.position.set(0, -0.5, GRID_SIZE / 2 + 0.5);
-    scene.add(bottomWall);
-
-    // Top wall
-    const topWall = new THREE.Mesh(horizontalWallGeometry, wallMaterial);
-    topWall.position.set(0, -0.5, -GRID_SIZE / 2 - 0.5);
-    scene.add(topWall);
-
-    // Vertical walls (left and right)
-    const verticalWallGeometry = new THREE.BoxGeometry(GRID_SIZE + 2, 1, 1);
+    // Create walls using helper function
+    createWall(true, wallPositions.bottom, wallMaterial); // Bottom wall (horizontal)
+    createWall(true, wallPositions.top, wallMaterial);    // Top wall (horizontal)
+    createWall(false, wallPositions.left, wallMaterial);  // Left wall (vertical)
+    createWall(false, wallPositions.right, wallMaterial); // Right wall (vertical)
     
-    // Left wall
-    const leftWall = new THREE.Mesh(verticalWallGeometry, wallMaterial);
-    leftWall.rotation.y = Math.PI / 2;
-    leftWall.position.set(-GRID_SIZE / 2 - 0.5, -0.5, 0);
-    scene.add(leftWall);
-
-    // Right wall
-    const rightWall = new THREE.Mesh(verticalWallGeometry, wallMaterial);
-    rightWall.rotation.y = Math.PI / 2;
-    rightWall.position.set(GRID_SIZE / 2 + 0.5, -0.5, 0);
-    scene.add(rightWall);
-    
-    // Add corner blocks
-    const cornerGeometry = new THREE.BoxGeometry(1, 1, 1);
-    
-    // Top-left corner
-    const topLeftCorner = new THREE.Mesh(cornerGeometry, wallMaterial);
-    topLeftCorner.position.set(-GRID_SIZE / 2 - 0.5, -0.5, -GRID_SIZE / 2 - 0.5);
-    scene.add(topLeftCorner);
-    
-    // Top-right corner
-    const topRightCorner = new THREE.Mesh(cornerGeometry, wallMaterial);
-    topRightCorner.position.set(GRID_SIZE / 2 + 0.5, -0.5, -GRID_SIZE / 2 - 0.5);
-    scene.add(topRightCorner);
-    
-    // Bottom-left corner
-    const bottomLeftCorner = new THREE.Mesh(cornerGeometry, wallMaterial);
-    bottomLeftCorner.position.set(-GRID_SIZE / 2 - 0.5, -0.5, GRID_SIZE / 2 + 0.5);
-    scene.add(bottomLeftCorner);
-    
-    // Bottom-right corner
-    const bottomRightCorner = new THREE.Mesh(cornerGeometry, wallMaterial);
-    bottomRightCorner.position.set(GRID_SIZE / 2 + 0.5, -0.5, GRID_SIZE / 2 + 0.5);
-    scene.add(bottomRightCorner);
+    // Create corners using helper function
+    createCorner(wallPositions.topLeft, wallMaterial);
+    createCorner(wallPositions.topRight, wallMaterial);
+    createCorner(wallPositions.bottomLeft, wallMaterial);
+    createCorner(wallPositions.bottomRight, wallMaterial);
 }
 
 // Create the initial snake
@@ -200,19 +285,23 @@ function createSnake() {
     });
     const head = new THREE.Mesh(headGeometry, headMaterial);
     
-    // Position the head at a grid cell center (0.5, 0, 0.5) instead of at the origin
-    head.position.set(0.5, 0, 0.5);
+    // Position the head at the middle of the grid
+    const startX = Math.floor(GRID_SIZE / 2);
+    const startZ = Math.floor(GRID_SIZE / 2);
+    const headCell = new GridCell(startX, startZ);
+    headCell.applyToObject(head);
     scene.add(head);
     snake.push(head);
 
     // Add initial tail segments
     for (let i = 1; i < 3; i++) {
-        addSnakeSegment(0.5 - i, 0, 0.5);
+        const segmentCell = new GridCell(startX - i, startZ);
+        addSnakeSegment(segmentCell);
     }
 }
 
 // Add a new segment to the snake
-function addSnakeSegment(x, y, z) {
+function addSnakeSegment(cell) {
     const segmentGeometry = new THREE.BoxGeometry(CELL_SIZE, CELL_SIZE, CELL_SIZE, 2, 2, 2);
     const segmentMaterial = new THREE.MeshPhongMaterial({ 
         color: 0x00cc00,
@@ -220,7 +309,7 @@ function addSnakeSegment(x, y, z) {
         shininess: 30
     });
     const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
-    segment.position.set(x, y, z);
+    cell.applyToObject(segment);
     scene.add(segment);
     snake.push(segment);
 }
@@ -239,36 +328,29 @@ function createFood() {
     });
     food = new THREE.Mesh(foodGeometry, foodMaterial);
     
-    // Generate random position
-    let foodPosition;
+    // Generate random position on grid cells
+    let foodCell;
     do {
-        // Generate a random integer position within the grid
-        const gridX = Math.floor(Math.random() * GRID_SIZE);
-        const gridZ = Math.floor(Math.random() * GRID_SIZE);
-        
-        // Convert to world coordinates (centered on grid cells)
-        foodPosition = {
-            x: gridX - Math.floor(GRID_SIZE / 2) + 0.5,
-            y: 0,
-            z: gridZ - Math.floor(GRID_SIZE / 2) + 0.5
-        };
-    } while (isPositionOccupied(foodPosition));
+        foodCell = GridCell.random();
+    } while (isPositionOccupied(foodCell));
     
-    food.position.set(foodPosition.x, foodPosition.y, foodPosition.z);
+    // Position food exactly on grid cell
+    foodCell.applyToObject(food);
     scene.add(food);
 }
 
-// Check if a position is occupied by the snake
-function isPositionOccupied(position) {
-    return snake.some(segment => 
-        segment.position.x === position.x && 
-        segment.position.z === position.z
-    );
+// Check if a grid position is occupied by the snake
+function isPositionOccupied(cell) {
+    return snake.some(segment => {
+        const segmentCell = GridCell.fromObject(segment);
+        return segmentCell.equals(cell);
+    });
 }
 
 // Create a bullet
 function createBullet(position, direction) {
-    const bulletGeometry = new THREE.SphereGeometry(CELL_SIZE / 4, 16, 16);
+    // Create a slightly larger bullet for better visibility
+    const bulletGeometry = new THREE.SphereGeometry(CELL_SIZE / 3, 16, 16);
     const bulletMaterial = new THREE.MeshPhongMaterial({ 
         color: 0xffff00,
         specular: 0xffffaa,
@@ -278,8 +360,16 @@ function createBullet(position, direction) {
     });
     const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
     
-    // Set bullet position slightly offset from the snake segment
-    bullet.position.copy(position);
+    // Set bullet position at the center of the cell
+    // Make a copy to avoid modifying the original position
+    const bulletPosition = position.clone();
+    
+    // Offset the bullet position slightly in the direction it will travel
+    // This prevents bullets from immediately colliding with the snake segment
+    bulletPosition.x += direction.x * 0.6;
+    bulletPosition.z += direction.z * 0.6;
+    
+    bullet.position.copy(bulletPosition);
     bullet.userData = {
         direction: { ...direction },
         createdAt: Date.now()
@@ -383,17 +473,11 @@ function updateCameraForViewport() {
 function handleResize() {
     // Update camera aspect ratio
     camera.aspect = window.innerWidth / window.innerHeight;
-    
-    // Recalculate camera position for new viewport size
-    // This will also update the camera.lookAt direction
-    updateCameraForViewport();
-    
-    // Update projection matrix after changing camera properties
     camera.updateProjectionMatrix();
     
     // Resize renderer to match new window dimensions
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio); // Maintain pixel ratio on resize
+    renderer.setPixelRatio(window.devicePixelRatio);
 }
 
 // Move the snake
@@ -409,32 +493,23 @@ function moveSnake() {
     // Update direction
     direction = { ...nextDirection };
 
-    // Get the current head position
+    // Get the current head position as a GridCell
     const head = snake[0];
-    const newHeadPosition = {
-        x: head.position.x + direction.x,
-        y: head.position.y + direction.y,
-        z: head.position.z + direction.z
-    };
+    const currentCell = GridCell.fromObject(head);
+    
+    // Calculate new grid position
+    const nextCell = currentCell.add(direction);
 
     // Check for collision with walls
-    if (
-        newHeadPosition.x < -GRID_SIZE / 2 + 0.5 || 
-        newHeadPosition.x > GRID_SIZE / 2 - 0.5 || 
-        newHeadPosition.z < -GRID_SIZE / 2 + 0.5 || 
-        newHeadPosition.z > GRID_SIZE / 2 - 0.5
-    ) {
+    if (!nextCell.isValid()) {
         gameOver();
         return;
     }
 
     // Check for collision with self
     for (let i = 1; i < snake.length; i++) {
-        const segment = snake[i];
-        if (
-            newHeadPosition.x === segment.position.x && 
-            newHeadPosition.z === segment.position.z
-        ) {
+        const segmentCell = GridCell.fromObject(snake[i]);
+        if (nextCell.equals(segmentCell)) {
             gameOver();
             return;
         }
@@ -446,24 +521,47 @@ function moveSnake() {
         // Wave motion is now applied in the animation loop for continuous movement
     }
 
-    // Move the head
-    head.position.set(newHeadPosition.x, newHeadPosition.y, newHeadPosition.z);
+    // Move the head to exact grid position
+    nextCell.applyToObject(head);
 
     // Check for food collision
-    if (
-        Math.abs(head.position.x - food.position.x) < CELL_SIZE / 2 && 
-        Math.abs(head.position.z - food.position.z) < CELL_SIZE / 2
-    ) {
+    const foodCell = GridCell.fromObject(food);
+    if (nextCell.equals(foodCell)) {
         // Eat food
         eatFood();
     }
 
-    // Randomly shoot bullets from body segments
+    // More consistent bullet firing system
+    // Only fire bullets from specific segments to make it more predictable
+    // Use a time-based approach to ensure consistent firing rate
+    const currentTime = Date.now();
+    
+    // Store the last firing time for each segment
+    if (!snake.lastFired) {
+        snake.lastFired = new Array(snake.length).fill(0);
+    }
+    
+    // Ensure the lastFired array is the same length as the snake
+    while (snake.lastFired.length < snake.length) {
+        snake.lastFired.push(0);
+    }
+    
+    // Only fire from body segments (not the head)
     for (let i = 1; i < snake.length; i++) {
-        if (Math.random() < BULLET_CHANCE) {
-            // Generate a random direction for the bullet
-            const randomDirection = getRandomDirection();
-            createBullet(snake[i].position.clone(), randomDirection);
+        // Minimum time between shots for each segment (ms)
+        const firingInterval = 2000 + (i * 500); // Different intervals for each segment
+        
+        // Check if enough time has passed since last firing
+        if (currentTime - snake.lastFired[i] > firingInterval) {
+            // Add some randomness to avoid all segments firing at once
+            if (Math.random() < BULLET_CHANCE * 2) { // Doubled chance but less frequent checks
+                // Generate a random direction for the bullet
+                const randomDirection = getRandomDirection();
+                createBullet(snake[i].position.clone(), randomDirection);
+                
+                // Update last firing time for this segment
+                snake.lastFired[i] = currentTime;
+            }
         }
     }
 }
@@ -504,22 +602,27 @@ function applyWaveMotion(segment, index) {
 
 // Get a random direction for bullets
 function getRandomDirection() {
+    // Define all possible directions
     const directions = [
-        // Cardinal directions
+        // Cardinal directions (more weight to these for more predictable patterns)
         { x: 1, y: 0, z: 0 },   // Right
         { x: -1, y: 0, z: 0 },  // Left
         { x: 0, y: 0, z: 1 },   // Down
         { x: 0, y: 0, z: -1 },  // Up
+        { x: 1, y: 0, z: 0 },   // Right (duplicate to increase probability)
+        { x: -1, y: 0, z: 0 },  // Left (duplicate to increase probability)
+        { x: 0, y: 0, z: 1 },   // Down (duplicate to increase probability)
+        { x: 0, y: 0, z: -1 },  // Up (duplicate to increase probability)
         
-        // Diagonal directions
+        // Diagonal directions (less common)
         { x: 1, y: 0, z: 1 },   // Down-Right
         { x: 1, y: 0, z: -1 },  // Up-Right
         { x: -1, y: 0, z: 1 },  // Down-Left
         { x: -1, y: 0, z: -1 }  // Up-Left
     ];
     
-    // Get a random direction
-    const randomDir = directions[Math.floor(Math.random() * directions.length)];
+    // Get a random direction from the weighted list
+    const randomDir = { ...directions[Math.floor(Math.random() * directions.length)] };
     
     // Normalize diagonal directions to maintain consistent speed
     if (randomDir.x !== 0 && randomDir.z !== 0) {
@@ -541,15 +644,17 @@ function updateBullets() {
         const bullet = bullets[i];
         const bulletDirection = bullet.userData.direction;
         
-        // Move the bullet
+        // Move the bullet with consistent speed
         bullet.position.x += bulletDirection.x * BULLET_SPEED;
         bullet.position.z += bulletDirection.z * BULLET_SPEED;
         
-        // Check for collision with food
-        if (
-            Math.abs(bullet.position.x - food.position.x) < CELL_SIZE / 2 && 
-            Math.abs(bullet.position.z - food.position.z) < CELL_SIZE / 2
-        ) {
+        // Check for collision with food - improved collision detection
+        const distanceToFood = Math.sqrt(
+            Math.pow(bullet.position.x - food.position.x, 2) + 
+            Math.pow(bullet.position.z - food.position.z, 2)
+        );
+        
+        if (distanceToFood < CELL_SIZE * 0.6) {
             // Create explosion at the position of the food
             createExplosion(food.position.clone());
             
@@ -569,12 +674,12 @@ function updateBullets() {
             continue;
         }
         
-        // Check for collision with walls
+        // Check for collision with walls - updated for new wall positions
         if (
-            bullet.position.x < -GRID_SIZE / 2 + 0.5 || 
-            bullet.position.x > GRID_SIZE / 2 - 0.5 || 
-            bullet.position.z < -GRID_SIZE / 2 + 0.5 || 
-            bullet.position.z > GRID_SIZE / 2 - 0.5
+            bullet.position.x < 0 || 
+            bullet.position.x > GRID_SIZE || 
+            bullet.position.z < 0 || 
+            bullet.position.z > GRID_SIZE
         ) {
             scene.remove(bullet);
             bullets.splice(i, 1);
@@ -597,7 +702,8 @@ function eatFood() {
     
     // Add new segment to snake
     const tail = snake[snake.length - 1];
-    addSnakeSegment(tail.position.x, tail.position.y, tail.position.z);
+    const tailCell = GridCell.fromObject(tail);
+    addSnakeSegment(tailCell);
     
     // Create new food
     createFood();
